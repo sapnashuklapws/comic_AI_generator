@@ -18,7 +18,7 @@ class ComicGenerator:
         self.client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
         self.text_model_name = "gemini-2.5-flash"
         
-        # FIX: Changed to the correct Gemini Developer API identifier for Imagen 3
+        # Set target identifier for the free-tier eligible image engine
         self.image_model_name = "gemini-2.5-flash-image"
         
     def generate_story_options(self, theme):
@@ -99,21 +99,24 @@ class ComicGenerator:
         
         for attempt in range(max_retries):
             try:
-                # API Call using correct model string and configs
-                result = self.client.models.generate_images(
+                # FIX: Routed call through generate_content with proper IMAGE modalities mapping
+                response = self.client.models.generate_content(
                     model=self.image_model_name,
-                    prompt=final_prompt,
-                    config=types.GenerateImagesConfig(
-                        number_of_images=1,
-                        output_mime_type="image/jpeg",
-                        # FIX: Changed from "3:2" to "4:3" (supported values are: "1:1", "3:4", "4:3", "9:16", "16:9")
-                        aspect_ratio="4:3" 
+                    contents=final_prompt,
+                    config=types.GenerateContentConfig(
+                        response_modalities=["IMAGE"],
+                        image_config=types.ImageConfig(
+                            aspect_ratio="4:3"
+                        )
                     )
                 )
                 
-                # Unpack response image bytes
-                for generated_image in result.generated_images:
-                    return Image.open(io.BytesIO(generated_image.image.image_bytes))
+                # Unpack and extract binary image inline components safely
+                if response.candidates and response.candidates[0].content.parts:
+                    for part in response.candidates[0].content.parts:
+                        if part.inline_data:
+                            image_bytes = part.inline_data.data
+                            return Image.open(io.BytesIO(image_bytes))
                 
                 return None
                     
@@ -210,7 +213,8 @@ def main():
                     with cols[i % 2]:
                         st.markdown(f"### 🖼️ Panel {i+1}")
                         if panel_image:
-                            st.image(panel_image, use_container_width=True)
+                            # FIX: Replaced use_container_width with updated structural width parameter
+                            st.image(panel_image, width="stretch")
                         else:
                             st.error(f"Failed to load panel {i+1}")
 
