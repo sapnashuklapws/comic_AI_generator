@@ -1,20 +1,17 @@
 import streamlit as st
-import replicate
 import os
-import requests
-from PIL import Image
-from io import BytesIO
-import google.generativeai as genai
+import io
 import time
+from PIL import Image
+import google.generativeai as genai
 
 class ComicGenerator:
     def __init__(self):
         # Configure Google GenAI with Streamlit secrets
         genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-        self.model_name = "gemini-2.5-flash"
-        
-        # Initialize Replicate client
-        self.replicate_client = replicate.Client(api_token=st.secrets["REPLICATE_API_KEY"])
+        self.text_model_name = "gemini-2.5-flash"
+        # Imagen 3 is Google's state-of-the-art image generation model
+        self.image_model_name = "imagen-3.0-generate-002"
         
     def generate_story_options(self, theme):
         prompt = f"""Answer in the same language as the user's input.
@@ -42,9 +39,8 @@ class ComicGenerator:
         📖 Description: Maria learns to organize her room independently.
         🎯 Moral: Being organized helps us be more independent."""
         
-        model = genai.GenerativeModel(self.model_name)
+        model = genai.GenerativeModel(self.text_model_name)
         response = model.generate_content(prompt)
-        
         return response.text
 
     def generate_image_prompts(self, story, child_image):
@@ -52,7 +48,7 @@ class ComicGenerator:
         {story}
         
         And considering we have a photo of a child who will be the main character,
-        generate 6-8 detailed image prompts that will work well with Stable Diffusion.
+        generate 6-8 detailed image prompts that will work well with Imagen 3.
         Each prompt should:
         - Describe a key scene from the story
         - Include style directions for a child-friendly, illustrated look
@@ -70,9 +66,8 @@ class ComicGenerator:
         
         (and so on...)"""
         
-        model = genai.GenerativeModel(self.model_name)
+        model = genai.GenerativeModel(self.text_model_name)
         response = model.generate_content(prompt)
-        
         content = response.text.strip()
         
         # Split into panels and clean them up
@@ -82,7 +77,6 @@ class ComicGenerator:
         else:
             panels = [p.strip() for p in content.split('Panel') if p.strip()]
         
-        # Clean up panel format
         cleaned_panels = []
         for panel in panels:
             if panel.startswith((':', '1:', '2:', '3:', '4:', '5:', '6:', '7:', '8:', '9:', '10:')):
@@ -98,42 +92,31 @@ class ComicGenerator:
         cleaned_prompt = str(prompt).replace('"', '').strip()
         cleaned_prompt = cleaned_prompt.split(':', 1)[-1].strip() if ':' in cleaned_prompt else cleaned_prompt
         
+        # Append target style variables directly to the prompt for Google Imagen
+        final_prompt = f"{cleaned_prompt}, child-friendly illustrated look, children's book illustration style, bright colors, soft lighting, vibrant"
+        
         for attempt in range(max_retries):
             try:
-                # Check internet connection
-                requests.get("https://api.replicate.com/v1/predictions", timeout=5)
-                
-                # Generate the image
-                output = self.replicate_client.run(
-                    "lucataco/sdxl-lcm:fbbd475b1084de80c47c35bfe4ae64b964294aa7e237e6537eed938cfd24903d",
-                    input={
-                        "prompt": cleaned_prompt,
-                        "negative_prompt": "scary, violent, inappropriate, realistic, photographic",
-                        "width": 768,
-                        "height": 512,
-                        "scheduler": "KarrasDPM",
-                        "num_inference_steps": 8,
-                        "guidance_scale": 7.5
+                # Call Google's Imagen Model
+                model = genai.GenerativeModel(self.image_model_name)
+                result = model.generate_content(
+                    final_prompt,
+                    generation_config={
+                        "response_mime_type": "image/jpeg"
                     }
                 )
                 
-                if output and isinstance(output, list) and len(output) > 0:
-                    response = requests.get(output[0])
-                    if response.status_code == 200:
-                        image = Image.open(BytesIO(response.content))
+                # Verify and convert bytes to a PIL Image
+                for part in result.candidates[0].content.parts:
+                    if part.inline_data:
+                        image_bytes = part.inline_data.data
+                        image = Image.open(io.BytesIO(image_bytes))
                         return image
-                return None
                 
-            except requests.exceptions.RequestException as e:
-                st.warning(f"Network error on attempt {attempt + 1}/{max_retries}. Retrying...")
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
-                else:
-                    st.error(f"Network error after {max_retries} attempts: {str(e)}")
-                    return None
+                return None
                     
             except Exception as e:
-                st.error(f"Error generating image: {str(e)}")
+                st.error(f"Error generating image on attempt {attempt + 1}: {str(e)}")
                 if attempt < max_retries - 1:
                     st.info(f"Retrying... Attempt {attempt + 2}/{max_retries}")
                     time.sleep(retry_delay)
@@ -163,9 +146,8 @@ class ComicGenerator:
         🎬 Scene 2:
         [Continue format for each scene...]"""
         
-        model = genai.GenerativeModel(self.model_name)
+        model = genai.GenerativeModel(self.text_model_name)
         response = model.generate_content(prompt)
-        
         return response.text
 
 def main():
@@ -265,12 +247,12 @@ def main():
                                     st.markdown(f"**Scene Description:**\n{display_prompt}")
                                 
                                 with st.spinner(f"Creating panel {i+1}..."):
-                                    image_url = generator.generate_comic_panel(prompt)
-                                    if image_url:
-                                        st.image(image_url, use_column_width=True)
+                                    panel_image = generator.generate_comic_panel(prompt)
+                                    if panel_image:
+                                        st.image(panel_image, use_column_width=True)
                                         if 'generated_images' not in st.session_state:
                                             st.session_state.generated_images = {}
-                                        st.session_state.generated_images[i] = image_url
+                                        st.session_state.generated_images[i] = panel_image
                                     else:
                                         st.error(f"Could not generate panel {i+1}. Please try again.")
         
