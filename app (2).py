@@ -84,23 +84,38 @@ class ComicGenerator:
         retry_delay = 2  # seconds
         
         cleaned_prompt = str(prompt).replace('"', '').strip()
+        # Remove "Panel X:" prefix if it exists
+        if ':' in cleaned_prompt:
+            cleaned_prompt = cleaned_prompt.split(':', 1)[-1].strip()
+            
         final_prompt = f"{cleaned_prompt}, child-friendly illustrated look, children's book illustration style, bright colors, soft lighting, vibrant"
         
         for attempt in range(max_retries):
             try:
-                # Call Google's Imagen Model via the generativeai structure
-                model = genai.GenerativeModel(self.image_model_name)
-                result = model.generate_content(final_prompt)
+                # 1. Use the proper Imagen model identifier
+                imagen = genai.ImageGenerationModel(self.image_model_name)
                 
-                # Verify and convert the image bytes out of the multimodal parts
-                for candidate in result.candidates:
-                    for part in candidate.content.parts:
-                        if part.inline_data:
-                            image_bytes = part.inline_data.data
-                            return Image.open(io.BytesIO(image_bytes))
+                # 2. Call generate_images instead of generate_content
+                result = imagen.generate_images(
+                    prompt=final_prompt,
+                    number_of_images=1,
+                    output_mime_type="image/jpeg",
+                    aspect_ratio="3:2", # Perfect aspect ratio for comic panels
+                )
+                
+                # 3. Correctly extract the image from the response object
+                for generated_image in result.images:
+                    # Convert the raw bytes into a viewable PIL Image
+                    return Image.open(io.BytesIO(generated_image.image_bytes))
                 
                 return None
                     
+            except Exception as e:
+                st.error(f"Error generating image on attempt {attempt + 1}: {str(e)}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+                else:
+                    return None                
             except Exception as e:
                 st.error(f"Error generating image on attempt {attempt + 1}: {str(e)}")
                 if attempt < max_retries - 1:
