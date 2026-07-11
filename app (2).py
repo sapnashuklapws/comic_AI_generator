@@ -9,12 +9,12 @@ class ComicGenerator:
     def __init__(self):
         # Configure Google GenAI with Streamlit secrets
         if "GOOGLE_API_KEY" not in st.secrets:
-            st.error("Missing 'GOOGLE_API_KEY' in Streamlit Secrets. Please configure it in your Streamlit dashboard app settings.")
+            st.error("Missing 'GOOGLE_API_KEY' in Streamlit Secrets. Please configure it in app settings.")
             st.stop()
             
         genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
         self.text_model_name = "gemini-2.5-flash"
-        # Official Gemini identifier for the Imagen 3 generation model
+        # Google's premier image generation model
         self.image_model_name = "imagen-3.0-generate-002"
         
     def generate_story_options(self, theme):
@@ -65,7 +65,7 @@ class ComicGenerator:
         response = model.generate_content(prompt)
         content = response.text.strip()
         
-        # Split into panels and clean them up cleanly
+        # Split into panels and clean them up
         if '🎨' in content:
             panels = [p.strip() for p in content.split('🎨') if p.strip()]
         else:
@@ -88,18 +88,16 @@ class ComicGenerator:
         
         for attempt in range(max_retries):
             try:
-                # Use ImageGenerationModel and call generate_images natively
-                imagen_model = genai.ImageGenerationModel(self.image_model_name)
-                result = imagen_model.generate_images(
-                    prompt=final_prompt,
-                    number_of_images=1,
-                    output_mime_type="image/jpeg",
-                    aspect_ratio="3:2"  # standard landscape layout for comic strips
-                )
+                # Call Google's Imagen Model via the generativeai structure
+                model = genai.GenerativeModel(self.image_model_name)
+                result = model.generate_content(final_prompt)
                 
-                # Fetch image bytes correctly out of the response structure
-                for generated_image in result.images:
-                    return Image.open(io.BytesIO(generated_image.image_bytes))
+                # Verify and convert the image bytes out of the multimodal parts
+                for candidate in result.candidates:
+                    for part in candidate.content.parts:
+                        if part.inline_data:
+                            image_bytes = part.inline_data.data
+                            return Image.open(io.BytesIO(image_bytes))
                 
                 return None
                     
