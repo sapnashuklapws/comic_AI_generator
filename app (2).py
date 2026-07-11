@@ -3,7 +3,7 @@ import os
 import io
 import time
 from PIL import Image
-# Upgrade to the modern Google GenAI library
+# Modern Google GenAI SDK imports
 from google import genai
 from google.genai import types
 
@@ -17,7 +17,9 @@ class ComicGenerator:
         # Initialize the modern SDK Client
         self.client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
         self.text_model_name = "gemini-2.5-flash"
-        self.image_model_name = "imagen-3.0-generate-002"
+        
+        # FIX: Changed to the correct Gemini Developer API identifier for Imagen 3
+        self.image_model_name = "imagen-3.0-generate-001"
         
     def generate_story_options(self, theme):
         prompt = f"""Answer in the same language as the user's input.
@@ -97,14 +99,15 @@ class ComicGenerator:
         
         for attempt in range(max_retries):
             try:
-                # Updated syntax for Imagen generation via the new SDK client
+                # API Call using correct model string and configs
                 result = self.client.models.generate_images(
                     model=self.image_model_name,
                     prompt=final_prompt,
                     config=types.GenerateImagesConfig(
                         number_of_images=1,
                         output_mime_type="image/jpeg",
-                        aspect_ratio="3:2" # Supported aspect ratios: "1:1", "3:4", "4:3", "9:16", "16:9", "3:2"
+                        # FIX: Changed from "3:2" to "4:3" (supported values are: "1:1", "3:4", "4:3", "9:16", "16:9")
+                        aspect_ratio="4:3" 
                     )
                 )
                 
