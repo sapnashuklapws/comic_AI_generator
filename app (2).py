@@ -19,7 +19,7 @@ class ComicGenerator:
         self.text_model_name = "gemini-2.5-flash"
         
         # FIX: Changed to the correct Gemini Developer API identifier for Imagen 3
-        self.image_model_name = "imagen-3.0-generate-001"
+        self.image_model_name = "imagen-4.0-generate-001"
         
     def generate_story_options(self, theme):
         prompt = f"""Answer in the same language as the user's input.
