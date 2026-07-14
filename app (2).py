@@ -25,7 +25,7 @@ class ComicGenerator:
         prompt = f"""Answer in the same language as the user's input.
         As an expert in education and children's literature, generate 3 different story options for a children's comic book about {theme}. 
         Each story should:
-        - Be suitable for children aged 4-8
+        - Be suitable for children aged 14-17
         - Incorporate educational principles like independence, natural learning, and respect
         - Have a clear moral or educational message
         - Be structured in 6-8 scenes
